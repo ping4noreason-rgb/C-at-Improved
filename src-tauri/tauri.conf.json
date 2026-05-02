@@ -1,0 +1,26 @@
+{
+  "productName": "cat-editor",
+  "version": "1.0.0",
+  "identifier": "com.cat.editor",
+  "build": {
+    "beforeDevCommand": null,
+    "beforeBuildCommand": null,
+    "frontendDist": "../dist",
+    "devUrl": null
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "C-at Editor",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "decorations": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

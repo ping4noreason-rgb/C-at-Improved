@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Editor</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/one-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.css">
+
+    <link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+    <div class="app">
+        <div class="titlebar">
+            <div class="activity-bar">
+                <button class="activity-btn active" type="button" title="Explorer" data-activity="explorer">E</button>
+                <button class="activity-btn" type="button" title="Problems" data-activity="problems">P</button>
+                <button class="activity-btn" type="button" title="Git" data-activity="git">G</button>
+                <button class="activity-btn" type="button" title="Run & Tools" data-activity="run">R</button>
+            </div>
+
+            <div class="workspace-shell">
+                <div data-tauri-drag-region class="top-strip">
+                    <div class="titlebar-brand">
+                        <span class="titlebar-title">Cat Editor</span>
+                        <span class="titlebar-subtitle" id="workspace-name">No workspace selected</span>
+                    </div>
+                    <div class="top-strip-actions">
+                        <button id="theme-toggle-btn" class="top-strip-btn" type="button" title="Switch theme">Light</button>
+                        <div class="window-controls">
+                            <button id="minimize-btn" type="button" aria-label="Minimize">-</button>
+                            <button id="maximize-btn" type="button" aria-label="Maximize">[]</button>
+                            <button id="close-btn" type="button" aria-label="Close">x</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="main-container">
+                    <aside class="sidebar">
+                        <div class="sidebar-view active" data-sidebar-view="explorer">
+                            <div class="sidebar-header">
+                                <span>Explorer</span>
+                                <div class="btn-group">
+                                    <span id="project-count" class="count-badge">0</span>
+                                    <button id="new-project-btn" class="icon-btn" type="button" title="New Project">+</button>
+                                </div>
+                            </div>
+
+                            <div class="sidebar-section">
+                                <div class="section-title">Projects</div>
+                                <div id="project-list" class="project-list"></div>
+                            </div>
+
+                            <div class="sidebar-section sidebar-fill">
+                                <div class="section-title">
+                                    <span>Files</span>
+                                    <div class="btn-group">
+                                        <button id="new-file-btn" class="icon-btn" type="button" title="New File">+</button>
+                                        <button id="import-files-btn" class="icon-btn" type="button" title="Import files">IF</button>
+                                        <button id="import-folder-btn" class="icon-btn" type="button" title="Import folder (preserves structure)">ID</button>
+                                        <button id="refresh-files-btn" class="icon-btn" type="button" title="Refresh">R</button>
+                                    </div>
+                                </div>
+                                <div id="file-tree" class="file-tree"></div>
+                                <input id="import-files-input" type="file" multiple hidden>
+                                <input id="import-folder-input" type="file" webkitdirectory directory multiple hidden>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-view" data-sidebar-view="problems">
+                            <div class="sidebar-header">
+                                <span>Problems</span>
+                                <div class="btn-group">
+                                    <span id="problem-count" class="count-badge">0</span>
+                                    <button id="refresh-problems-btn" class="icon-btn" type="button" title="Refresh problems">R</button>
+                                </div>
+                            </div>
+                            <div class="sidebar-section sidebar-fill">
+                                <div class="section-title">Diagnostics</div>
+                                <div id="problem-list" class="project-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-view" data-sidebar-view="git">
+                            <div class="sidebar-header">
+                                <span>Git</span>
+                                <div class="btn-group">
+                                    <span id="git-branch-label" class="count-badge">No repo</span>
+                                    <button id="refresh-git-btn" class="icon-btn" type="button" title="Refresh Git status">R</button>
+                                </div>
+                            </div>
+                            <div class="sidebar-section">
+                                <div class="section-title">Repository</div>
+                                <div class="meta-panel">
+                                    <div class="meta-row">
+                                        <span class="meta-label">Branch</span>
+                                        <strong id="git-branch">No repository</strong>
+                                    </div>
+                                    <div id="git-summary" class="meta-text">Open a workspace to inspect repository status.</div>
+                                    <div class="btn-grid">
+                                        <button id="init-git-btn" type="button">Init</button>
+                                        <button id="git-stage-all-btn" type="button">Stage All</button>
+                                        <button id="git-commit-btn" type="button">Commit</button>
+                                        <button id="git-pull-btn" type="button">Pull</button>
+                                        <button id="git-push-btn" type="button">Push</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="sidebar-section sidebar-fill">
+                                <div class="section-title">Changes</div>
+                                <div id="git-status-list" class="project-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-view" data-sidebar-view="run">
+                            <div class="sidebar-header">
+                                <span>Run</span>
+                                <div class="btn-group">
+                                    <span id="terminal-status" class="count-badge">idle</span>
+                                    <span id="terminal-history-count" class="count-badge">0 cmd</span>
+                                </div>
+                            </div>
+                            <div class="sidebar-section">
+                                <div class="section-title">Toolchain</div>
+                                <div class="meta-panel">
+                                    <div class="meta-row">
+                                        <span class="meta-label">Compiler</span>
+                                        <strong id="runtime-compiler">Unknown</strong>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Debugger</span>
+                                        <strong id="runtime-debugger">Unknown</strong>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Git</span>
+                                        <strong id="runtime-git">Unknown</strong>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Packages</span>
+                                        <strong id="runtime-packages">Unknown</strong>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Terminal</span>
+                                        <strong id="runtime-terminal">Offline</strong>
+                                    </div>
+                                    <div class="btn-grid">
+                                        <button id="run-panel-run-btn" class="primary-btn" type="button">Run</button>
+                                        <button id="run-panel-debug-btn" type="button">Debug</button>
+                                        <button id="install-library-btn" type="button">Install Library</button>
+                                        <button id="open-terminal-btn" type="button">Terminal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main class="editor-area">
+                        <div class="editor-toolbar">
+                            <div class="breadcrumbs">
+                                <span>EXPLORER</span>
+                                <span>/</span>
+                                <span id="active-project-label">Select a workspace to begin</span>
+                                <span>/</span>
+                                <span id="active-file-label">No file selected</span>
+                            </div>
+                            <div class="toolbar-actions">
+                                <button id="compile-btn" class="primary-btn" type="button">Run</button>
+                                <button id="debug-btn" type="button">Debug</button>
+                                <button id="save-btn" type="button">Save</button>
+                                <button id="toggle-output-btn" type="button">Hide Output</button>
+                            </div>
+                        </div>
+
+                        <div id="tabs-bar" class="tabs-bar"></div>
+
+                        <section class="editor-stage">
+                            <div id="editor-empty-state" class="editor-empty-state">
+                                <strong>Workspace ready</strong>
+                                <p>Create a project or open a file to start working.</p>
+                                <div class="empty-state-actions">
+                                    <button id="empty-new-project-btn" class="primary-btn" type="button">Create Project</button>
+                                    <button id="empty-new-file-btn" type="button">Create File</button>
+                                </div>
+                            </div>
+                            <textarea id="editor"></textarea>
+                        </section>
+
+                        <section id="output-panel" class="output-panel">
+                            <div id="output-resizer" class="output-resizer" title="Resize terminal"></div>
+                            <div class="panel-header">
+                                <div class="panel-tabs">
+                                    <button class="panel-tab active" type="button" data-output-view="logs">Logs</button>
+                                    <button class="panel-tab" type="button" data-output-view="terminal">PowerShell</button>
+                                </div>
+                                <div class="panel-actions active" data-panel-actions="logs">
+                                    <button class="filter-chip active" type="button" data-log-filter="SYS">SYS</button>
+                                    <button class="filter-chip active" type="button" data-log-filter="INFO">INFO</button>
+                                    <button class="filter-chip active" type="button" data-log-filter="ERR">ERR</button>
+                                    <button id="clear-output-btn" class="icon-btn" type="button">Clear</button>
+                                </div>
+                                <div class="panel-actions" data-panel-actions="terminal">
+                                    <button id="restart-terminal-btn" class="icon-btn" type="button">Restart</button>
+                                    <button id="clear-terminal-btn" class="icon-btn" type="button">Clear</button>
+                                </div>
+                            </div>
+                            <div class="panel-view active" data-panel-view="logs">
+                                <div id="output-content" class="output-content"></div>
+                            </div>
+                            <div class="panel-view terminal-view" data-panel-view="terminal">
+                                <div id="terminal-output" class="terminal-output"></div>
+                                <form id="terminal-form" class="terminal-form">
+                                    <div id="terminal-cwd" class="terminal-cwd">PS&gt;</div>
+                                    <textarea id="terminal-input" class="terminal-input" rows="1" spellcheck="false" placeholder="Enter a PowerShell command"></textarea>
+                                    <button id="terminal-submit-btn" class="primary-btn" type="submit">Run</button>
+                                </form>
+                            </div>
+                        </section>
+
+                        <footer class="statusbar">
+                            <span id="cursor-pos">Ln 1, Col 1</span>
+                            <span id="file-lang">C</span>
+                            <span id="file-size">0 KB</span>
+                            <span id="status-project">No project</span>
+                            <span id="system-metrics">RAM 0.0/0.0 GB | CPU 0%</span>
+                        </footer>
+                    </main>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-root"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/jump-to-line.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/annotatescrollbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.js"></script>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
