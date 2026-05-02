@@ -70,11 +70,12 @@ Core Editor
 6. Keyboard shortcuts for common actions
 
 ## Screenshots
-<img width="800" alt="Main editor window" src="https://github.com/user-attachments/assets/7255dafb-0751-4b93-8817-6a187764de53" loading="lazy">
-<img width="800" alt="Standard README file" src="https://github.com/user-attachments/assets/6ebaf931-d100-46a4-9d23-785ee512f64c" loading="lazy">
-<img width="800" alt="Toolchain" src="https://github.com/user-attachments/assets/62a5fc6a-e9bb-4f5d-8efc-58eef7d21a10" loading="lazy">
-<img width="800" alt="Error showing interface" src="https://github.com/user-attachments/assets/bffc8882-6397-4f99-b8f1-d64120b6ef42" loading="lazy">
-<img width="800" alt="Git interface" src="https://github.com/user-attachments/assets/a1d18140-9c48-4f21-806a-7e83df1e0895" loading="lazy">
+<img width="800" alt="Standard README file" alt="Снимок экрана 2026-05-02 154917" src="https://github.com/user-attachments/assets/b3df1708-0011-408e-adb1-970d4389e3bd" />
+<img width="800" alt="Main editor window" alt="Снимок экрана 2026-05-02 154903" src="https://github.com/user-attachments/assets/8d9ba8b9-ae08-478f-bc4b-9196f66e62b4" />
+<img width="800" alt="Error showing interface" alt="Снимок экрана 2026-05-02 154931" src="https://github.com/user-attachments/assets/071868ef-bc86-4cff-b55a-ef24c074f936" />
+<img width="800" alt="Git interface" alt="Снимок экрана 2026-05-02 154949" src="https://github.com/user-attachments/assets/cf0b9327-5459-444f-98d4-0d8f18860b41" />
+<img width="800" alt="Toolchain" alt="Снимок экрана 2026-05-02 154958" src="https://github.com/user-attachments/assets/0a3b04df-2d71-405c-b76b-151c1101cf44" />
+
 
 # Architecture
 
