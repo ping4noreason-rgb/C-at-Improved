@@ -11,11 +11,9 @@ impl PathValidator {
     const PROJECTS_DIR: &'static str = "Projects";
 
     pub fn get_primary_root() -> PathBuf {
-        dirs::data_local_dir()
-            .or_else(dirs::document_dir)
+        dirs::document_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(Self::APP_DIR)
-            .join(Self::PROJECTS_DIR)
+            .join("C-at-Projects")
     }
 
     pub fn get_legacy_root() -> Option<PathBuf> {
