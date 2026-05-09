@@ -231,6 +231,23 @@ export function renderGitStatus(appState, fileTree, onOpenGitFile) {
         return;
     }
 
+    const resolveGitEntryPath = (repoRoot, entryPath) => {
+        const cleaned = String(entryPath || '')
+            .trim()
+            .replace(/^"(.*)"$/, '$1')
+            .replace(/\\"/g, '"');
+        if (!cleaned) return '';
+        if (/^[a-zA-Z]:[\\/]/.test(cleaned) || cleaned.startsWith('\\\\')) {
+            return cleaned;
+        }
+        if (!repoRoot) {
+            return cleaned;
+        }
+        const root = String(repoRoot).replace(/[\\/]+$/, '');
+        const relative = cleaned.replace(/^[\\/]+/, '');
+        return `${root}\\${relative.replace(/\//g, '\\')}`;
+    };
+
     status.entries.forEach(entry => {
         const item = document.createElement('button');
         item.type = 'button';
@@ -242,9 +259,7 @@ export function renderGitStatus(appState, fileTree, onOpenGitFile) {
         `;
         item.addEventListener('click', () => {
             if (!entry.deleted) {
-                const targetPath = status.repo_root
-                    ? `${status.repo_root}\\${entry.path.replace(/\//g, '\\')}`
-                    : entry.path;
+                const targetPath = resolveGitEntryPath(status.repo_root, entry.path);
                 onOpenGitFile(targetPath, fileTree);
             }
         });

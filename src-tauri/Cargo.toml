@@ -8,7 +8,7 @@ name = "cat-editor"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = "2.0.0"
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
 tauri = { version = "2.0.0", features = ["devtools"] }
@@ -38,5 +38,44 @@ features = ["alloc"]
 
 [profile.release]
 opt-level = 3
-lto = true
+lto = "fat"
 codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.release.package.tauri]
+opt-level = "s"
+strip = true
+
+[profile.release.package.serde]
+opt-level = "s"
+
+[profile.release.package.tokio]
+opt-level = 3
+
+[profile.release.package.regex]
+opt-level = "s" 
+
+[profile.release.package.walkdir]
+opt-level = "s"
+
+[profile.release.package.sysinfo]
+opt-level = "s"
+
+[profile.release.package.chrono]
+opt-level = "s"
+
+[profile.release.package.encoding_rs]
+opt-level = "s"
+
+[profile.release.package.trash]
+opt-level = "s"
+
+[profile.release.package.mime_guess]
+opt-level = "s"
+
+[profile.release.package.tracing]
+opt-level = 3
+
+[profile.release.package.futures]
+opt-level = 3

@@ -2,6 +2,16 @@ import { logger } from './logger.js';
 
 let invoke = null;
 let tauriConnected = false;
+const DEFAULT_INVOKE_TIMEOUT_MS = 20000;
+const SLOW_COMMAND_TIMEOUT_MS = 60000;
+const SLOW_COMMANDS = new Set([
+    'compile_code',
+    'build_project',
+    'configure_project_build',
+    'git_pull',
+    'git_push',
+    'install_package'
+]);
 
 const mockState = {
     projects: [],
@@ -454,8 +464,8 @@ async function mockInvoke(cmd, args = {}) {
 
 async function waitForTauri(maxAttempts = 50, delayMs = 100) {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        if (window.__TAURI__) {
-            return window.__TAURI__;
+        if (window.__TAURI_INTERNALS__?.invoke || window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke) {
+            return true;
         }
         await sleep(delayMs);
     }
@@ -467,7 +477,10 @@ export async function initTauri() {
     const tauri = await waitForTauri();
 
     if (tauri) {
-        invoke = tauri.core?.invoke || tauri.invoke || null;
+        invoke = window.__TAURI_INTERNALS__?.invoke
+            || window.__TAURI__?.core?.invoke
+            || window.__TAURI__?.invoke
+            || null;
 
         if (invoke) {
             tauriConnected = true;
@@ -476,7 +489,20 @@ export async function initTauri() {
         }
     }
 
+    const isLikelyNativeRuntime = window.location?.protocol === 'tauri:'
+        || /tauri/i.test(window.navigator?.userAgent || '');
+    const allowMockFallback = !isLikelyNativeRuntime
+        || window.location?.search?.includes('mock=1');
+
+    if (!allowMockFallback) {
+        invoke = null;
+        tauriConnected = false;
+        logger.err('Tauri bridge is unavailable in native runtime. Mock mode is blocked for stability.');
+        return false;
+    }
+
     invoke = mockInvoke;
+    tauriConnected = false;
     logger.err('Tauri bridge is unavailable. Running in fallback web mode.');
     return false;
 }
@@ -487,7 +513,13 @@ async function safeInvoke(cmd, args = {}) {
     }
 
     try {
-        return await invoke(cmd, args);
+        const timeoutMs = SLOW_COMMANDS.has(cmd) ? SLOW_COMMAND_TIMEOUT_MS : DEFAULT_INVOKE_TIMEOUT_MS;
+        return await Promise.race([
+            invoke(cmd, args),
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error(`Command timeout after ${timeoutMs}ms: ${cmd}`)), timeoutMs);
+            })
+        ]);
     } catch (error) {
         const message = typeof error === 'string'
             ? error

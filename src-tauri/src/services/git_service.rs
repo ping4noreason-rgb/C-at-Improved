@@ -178,7 +178,7 @@ impl GitService {
 
     fn status_blocking(git_path: &Path, project_path: &Path) -> Result<GitStatusSummary, AppError> {
         let repo_root = Self::discover_repo_root(git_path, project_path)?;
-        let Some(repo_root) = repo_root else {
+        let Some(_repo_root) = repo_root else {
             return Ok(GitStatusSummary {
                 available: true,
                 repository: false,
@@ -193,25 +193,33 @@ impl GitService {
             });
         };
 
-        let output = Self::run_git_raw(git_path, &repo_root, &["status", "--short", "--branch", "--untracked-files=normal"])?;
+        let output = Self::run_git_raw(
+            git_path,
+            project_path,
+            &[
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--branch",
+                "--untracked-files=normal",
+                "--",
+                ".",
+            ],
+        )?;
         if !output.status.success() {
             return Err(AppError::Git(
                 String::from_utf8_lossy(&output.stderr).trim().to_string(),
             ));
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let mut lines = stdout.lines();
-        let branch_line = lines.next().unwrap_or_default();
-        let (branch, upstream, ahead, behind) = Self::parse_branch_line(branch_line);
-        let entries = lines
-            .filter_map(Self::parse_status_line)
-            .collect::<Vec<_>>();
+        let (branch_line, entries) = Self::parse_status_porcelain_z(&output.stdout);
+        let (branch, upstream, ahead, behind) = Self::parse_branch_line(&branch_line);
 
         Ok(GitStatusSummary {
             available: true,
             repository: true,
-            repo_root: Some(repo_root.to_string_lossy().to_string()),
+            // Keep file opening scoped to selected project directory.
+            repo_root: Some(project_path.to_string_lossy().to_string()),
             branch,
             upstream,
             ahead,
@@ -288,6 +296,42 @@ impl GitService {
             .map_err(|error| AppError::Git(format!("Failed to execute git: {}", error)))
     }
 
+    fn parse_status_porcelain_z(stdout: &[u8]) -> (String, Vec<GitFileStatus>) {
+        let text = String::from_utf8_lossy(stdout);
+        let records = text
+            .split('\0')
+            .filter(|record| !record.is_empty())
+            .collect::<Vec<_>>();
+
+        let mut branch_line = String::new();
+        let mut entries = Vec::new();
+        let mut index = 0usize;
+
+        while index < records.len() {
+            let record = records[index];
+            if record.starts_with("## ") {
+                branch_line = record.to_string();
+                index += 1;
+                continue;
+            }
+
+            if let Some(mut entry) = Self::parse_status_record(record) {
+                if entry.renamed && index + 1 < records.len() {
+                    let new_path = records[index + 1].trim();
+                    if !new_path.is_empty() {
+                        entry.path = new_path.to_string();
+                    }
+                    index += 1;
+                }
+                entries.push(entry);
+            }
+
+            index += 1;
+        }
+
+        (branch_line, entries)
+    }
+
     fn parse_branch_line(line: &str) -> (Option<String>, Option<String>, u32, u32) {
         if !line.starts_with("##") {
             return (None, None, 0, 0);
@@ -340,21 +384,15 @@ impl GitService {
         (branch, upstream, ahead, behind)
     }
 
-    fn parse_status_line(line: &str) -> Option<GitFileStatus> {
-        if line.len() < 3 {
+    fn parse_status_record(line: &str) -> Option<GitFileStatus> {
+        if line.len() < 4 {
             return None;
         }
 
         let chars = line.chars().collect::<Vec<_>>();
         let staged_char = *chars.first()?;
         let unstaged_char = *chars.get(1)?;
-        let raw_path = line.get(3..)?.trim();
-        let path = raw_path
-            .split(" -> ")
-            .last()
-            .unwrap_or(raw_path)
-            .trim()
-            .to_string();
+        let path = line.get(3..)?.trim().to_string();
 
         Some(GitFileStatus {
             path,

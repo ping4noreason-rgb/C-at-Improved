@@ -9,7 +9,6 @@
     "devUrl": null
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "C-at Editor",
@@ -18,9 +17,22 @@
         "resizable": true,
         "decorations": false
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "languages": ["English", "Russian"],
+        "installerIcon": "icons/icon.ico"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
   }
 }

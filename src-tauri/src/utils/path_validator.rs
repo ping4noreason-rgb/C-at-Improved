@@ -7,8 +7,6 @@ pub struct PathValidator;
 
 impl PathValidator {
     const LEGACY_BASE_DIR: &'static str = "C-at-Projects";
-    const APP_DIR: &'static str = "Cat Editor";
-    const PROJECTS_DIR: &'static str = "Projects";
 
     pub fn get_primary_root() -> PathBuf {
         dirs::document_dir()

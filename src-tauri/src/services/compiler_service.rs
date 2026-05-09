@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 #[cfg(target_os = "windows")]
@@ -15,6 +16,9 @@ use crate::utils::path_validator::PathValidator;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+static DIAGNOSTIC_REGEX: OnceLock<Regex> = OnceLock::new();
+static IDENT_REGEX: OnceLock<Regex> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BuildMode {
@@ -208,7 +212,14 @@ impl CompilerService {
         })?;
         let build_mode = BuildMode::from_str(mode);
         let workspace_dir = match project_path {
-            Some(path) => Some(PathValidator::validate_directory_path(path)?),
+            Some(path) => {
+                let as_text = path.to_string_lossy();
+                if as_text.trim().is_empty() {
+                    None
+                } else {
+                    Some(PathValidator::validate_directory_path(path)?)
+                }
+            }
             None => None,
         };
 
@@ -218,14 +229,7 @@ impl CompilerService {
     
         // Get the source path
         let source_path = if let Some(path) = file_path {
-            let validated = PathValidator::validate_path(path)?;
-            let absolute = if !validated.is_absolute() {
-                std::fs::canonicalize(&validated)
-                    .map_err(|e| AppError::Io(format!("Failed to resolve path: {}", e)))?
-            } else {
-                validated
-            };
-            absolute
+            Self::resolve_source_path(path, workspace_dir.as_deref())?
         } else {
             let temp_dir = TempDir::new().map_err(|error| {
                 tracing::warn!("Failed to create temp dir: {}", error);
@@ -247,6 +251,16 @@ impl CompilerService {
                 AppError::Io(error.to_string())
             })?;
             dir
+        } else if let Some(file_parent) = source_path.parent() {
+            if file_parent.parent().is_none() {
+                std::env::current_dir()
+                    .map_err(|e| AppError::Io(format!("Failed to read current directory: {}", e)))?
+                    .join(".cat-editor")
+                    .join("build")
+                    .join(build_mode.as_str())
+            } else {
+                file_parent.to_path_buf()
+            }
         } else {
             scratch_dir
                 .as_ref()
@@ -276,7 +290,7 @@ impl CompilerService {
             .to_ascii_lowercase();
 
         // Run compilation in blocking task
-        let compile_output = tokio::task::spawn_blocking(move || {
+        let compile_output = timeout(self.timeout_duration, tokio::task::spawn_blocking(move || {
             // Get the source directory and filename separately
             let source_dir = source_path_for_task
                 .parent()
@@ -297,7 +311,7 @@ impl CompilerService {
             // Pass ONLY the filename (no path) to the compiler
             command.arg(&source_filename_str);
             command.arg("-o");
-            command.arg(&exe_path_for_task);
+            command.arg(Self::compiler_path_arg(&exe_path_for_task));
         
             if build_mode == BuildMode::Debug {
                 if compiler_name == "tcc" {
@@ -312,7 +326,7 @@ impl CompilerService {
                 let include_path = workspace.join("include");
                 if include_path.exists() {
                     if let Ok(include_abs) = include_path.canonicalize() {
-                        let include_str = include_abs.to_string_lossy().to_string();
+                        let include_str = Self::compiler_path_arg(&include_abs);
                         command.arg(format!("-I{}", include_str));
                     }
                 }
@@ -331,16 +345,22 @@ impl CompilerService {
             );
         
             command.output()
-        }).await;
+        })).await;
     
         // Handle the result
         let output = match compile_output {
-            Ok(Ok(output)) => output,
-            Ok(Err(e)) => {
+            Ok(Ok(Ok(output))) => output,
+            Ok(Ok(Err(e))) => {
                 return Err(AppError::Compiler(format!("Compilation failed: {}", e)));
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 return Err(AppError::Compiler(format!("Compilation task failed: {}", e)));
+            }
+            Err(_) => {
+                return Err(AppError::Timeout(format!(
+                    "Compilation timed out after {} seconds",
+                    self.timeout_duration.as_secs()
+                )));
             }
         };
     
@@ -554,10 +574,12 @@ impl CompilerService {
     }
 
     fn parse_errors(&self, stderr: &str, base_dir: Option<&Path>) -> Vec<SyntaxError> {
-        let regex = Regex::new(
-            r"^(?P<file>.*?):(?P<line>\d+):(?:(?P<column>\d+):)?\s*(?P<kind>fatal error|error|warning):\s*(?P<message>.+)$",
-        )
-        .unwrap();
+        let regex = DIAGNOSTIC_REGEX.get_or_init(|| {
+            Regex::new(
+                r"^(?P<file>.*?):(?P<line>\d+):(?:(?P<column>\d+):)?\s*(?P<kind>fatal error|error|warning):\s*(?P<message>.+)$",
+            )
+            .expect("valid diagnostic regex")
+        });
         stderr
             .lines()
             .filter_map(|line| {
@@ -616,7 +638,9 @@ impl CompilerService {
         }
 
         // Extract identifiers from the buffer (very fast regex)
-        let ident_re = Regex::new(r"\b([A-Za-z_][A-Za-z0-9_]*)\b").unwrap();
+        let ident_re = IDENT_REGEX.get_or_init(|| {
+            Regex::new(r"\b([A-Za-z_][A-Za-z0-9_]*)\b").expect("valid identifier regex")
+        });
         let mut seen = std::collections::HashSet::new();
         for cap in ident_re.captures_iter(code) {
             if let Some(id) = cap.get(1) {
@@ -652,12 +676,85 @@ impl CompilerService {
             return None;
         }
 
-        let file_path = PathBuf::from(file);
+        // Normalize common long-path/extended prefixes that compilers may emit
+        // Examples to handle: "\\\\?\\C:\\..." and the forward-slash variant "//?/C:/..."
+        let mut raw = file.trim().to_string();
+
+        #[cfg(target_os = "windows")]
+        {
+            if raw.starts_with("\\\\?\\UNC\\") {
+                // "\\\\?\\UNC\\server\\share" -> "\\server\\share"
+                raw = raw.replacen("\\\\?\\UNC\\", "\\\\", 1);
+            } else if raw.starts_with("\\\\?\\") {
+                // Drop the "\\\\?\\" prefix
+                raw = raw.replacen("\\\\?\\", "", 1);
+            } else if raw.starts_with("//?/") {
+                // Some toolchains produce a forward-slash variant: "//?/C:/path"
+                raw = raw.replacen("//?/", "", 1);
+            }
+        }
+
+        let file_path = PathBuf::from(&raw);
         if file_path.is_absolute() {
             return Some(file_path.to_string_lossy().to_string());
         }
 
         let resolved = base_dir?.join(file_path);
         Some(resolved.to_string_lossy().to_string())
+    }
+
+    fn compiler_path_arg(path: &Path) -> String {
+        let mut s = path.to_string_lossy().to_string();
+
+        #[cfg(target_os = "windows")]
+        {
+            // Handle extended-length Windows paths that start with "\\\\?\\" or "\\\\?\\UNC\\"
+            if s.starts_with("\\\\?\\UNC\\") {
+                // Convert "\\\\?\\UNC\\server\\share\\..." -> "\\server\\share\\..."
+                s = s.replacen("\\\\?\\UNC\\", "\\\\", 1);
+            } else if s.starts_with("\\\\?\\") {
+                // Strip the "\\\\?\\" prefix
+                s = s.replacen("\\\\?\\", "", 1);
+            } else if s.starts_with("//?/") {
+                // Also defensive for any previously-converted forward-slash variant
+                s = s.replacen("//?/", "", 1);
+            }
+        }
+
+        // Use forward slashes for compiler flags (GCC/Clang/TCC accept both on Windows)
+        s.replace('\\', "/")
+    }
+
+    fn resolve_source_path(path: &Path, workspace_dir: Option<&Path>) -> Result<PathBuf, AppError> {
+        let raw = path.to_string_lossy().trim().to_string();
+        if raw.is_empty() {
+            return Err(AppError::NotFound("Source file path is empty.".to_string()));
+        }
+
+        // Normalize malformed absolute-like paths such as "//main.c" or "\\main.c".
+        let candidate = if (raw.starts_with('/') || raw.starts_with('\\'))
+            && !raw.starts_with("\\\\")
+            && workspace_dir.is_some()
+            && Path::new(&raw).components().count() <= 2
+        {
+            let relative = raw.trim_start_matches(['/', '\\']);
+            workspace_dir.unwrap().join(relative)
+        } else if path.is_absolute() {
+            path.to_path_buf()
+        } else if let Some(workspace) = workspace_dir {
+            workspace.join(path)
+        } else {
+            path.to_path_buf()
+        };
+
+        let validated = PathValidator::validate_path(&candidate)?;
+        if !validated.is_file() {
+            return Err(AppError::NotFound(format!(
+                "Source file not found: {}",
+                validated.display()
+            )));
+        }
+
+        Ok(validated)
     }
 }

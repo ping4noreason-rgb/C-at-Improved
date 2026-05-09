@@ -59,7 +59,12 @@ class App {
         this.initTheme();
         this.initOutputState();
 
-        await initTauri();
+        const tauriReady = await initTauri();
+        const nativeRuntime = window.location?.protocol === 'tauri:' || /tauri/i.test(window.navigator?.userAgent || '');
+        if (!tauriReady && nativeRuntime) {
+            logger.err('Native bridge failed to initialize. App is running in degraded mode.');
+            showToast('Native bridge initialization failed. Restart the app.', 'error');
+        }
         await this.initRuntimeStatus();
         await editor.init();
 
@@ -1237,6 +1242,23 @@ class App {
             return;
         }
 
+        const resolveGitEntryPath = (repoRoot, entryPath) => {
+            const cleaned = String(entryPath || '')
+                .trim()
+                .replace(/^"(.*)"$/, '$1')
+                .replace(/\\"/g, '"');
+            if (!cleaned) return '';
+            if (/^[a-zA-Z]:[\\/]/.test(cleaned) || cleaned.startsWith('\\\\')) {
+                return cleaned;
+            }
+            if (!repoRoot) {
+                return cleaned;
+            }
+            const root = String(repoRoot).replace(/[\\/]+$/, '');
+            const relative = cleaned.replace(/^[\\/]+/, '');
+            return `${root}\\${relative.replace(/\//g, '\\')}`;
+        };
+
         status.entries.forEach(entry => {
             const item = document.createElement('button');
             item.type = 'button';
@@ -1248,9 +1270,7 @@ class App {
             `;
             item.addEventListener('click', () => {
                 if (!entry.deleted) {
-                    const targetPath = status.repo_root
-                        ? `${status.repo_root}\\${entry.path.replace(/\//g, '\\')}`
-                        : entry.path;
+                    const targetPath = resolveGitEntryPath(status.repo_root, entry.path);
                     fileTree.openFilePath(targetPath).catch(error => {
                         logger.err('Failed to open Git file.', {
                             details: error?.message || String(error)

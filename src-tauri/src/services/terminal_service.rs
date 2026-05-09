@@ -179,40 +179,30 @@ impl TerminalService {
         R: tokio::io::AsyncRead + Unpin + Send + 'static,
     {
         tokio::spawn(async move {
-            // Wrap entire reader in panic catch to prevent task from dying silently
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let rt = tokio::runtime::Handle::current();
-                rt.block_on(async {
-                    let mut lines = BufReader::new(reader).lines();
+            let mut lines = BufReader::new(reader).lines();
 
-                    loop {
-                        match lines.next_line().await {
-                            Ok(Some(line)) => {
-                                Self::push_line(Arc::clone(&session), stream, line).await;
-                            }
-                            Ok(None) => break,
-                            Err(error) => {
-                                warn!("Terminal stream read error on {}: {}", stream, error);
-                                Self::push_event(
-                                    &session,
-                                    TerminalOutputEvent {
-                                        stream: "stderr".to_string(),
-                                        text: format!("Terminal stream error: {}", error),
-                                        kind: Some("stream-error".to_string()),
-                                        cwd: None,
-                                        exit_code: None,
-                                    },
-                                )
-                                .await;
-                                break;
-                            }
-                        }
+            loop {
+                match lines.next_line().await {
+                    Ok(Some(line)) => {
+                        Self::push_line(Arc::clone(&session), stream, line).await;
                     }
-                })
-            }));
-
-            if let Err(_) = result {
-                warn!("Reader task panicked for stream {}", stream);
+                    Ok(None) => break,
+                    Err(error) => {
+                        warn!("Terminal stream read error on {}: {}", stream, error);
+                        Self::push_event(
+                            &session,
+                            TerminalOutputEvent {
+                                stream: "stderr".to_string(),
+                                text: format!("Terminal stream error: {}", error),
+                                kind: Some("stream-error".to_string()),
+                                cwd: None,
+                                exit_code: None,
+                            },
+                        )
+                        .await;
+                        break;
+                    }
+                }
             }
 
             if !session.closed.swap(true, Ordering::SeqCst) {
