@@ -7,22 +7,7 @@
 
 ## Overview
 Cat Editor is a modern desktop code editor built with Tauri (Rust backend + JavaScript frontend), designed to provide a fast, native experience for C/C++ developers. It combines a clean interface with powerful features including real-time syntax checking, project management, Git integration, and an embedded PowerShell terminal.
-> **Status:** Stable for daily use | Active development | Known issues (see below)
-
-## KNOWN ISSUES
-![Known Issues](https://img.shields.io/badge/issues-3%20known-yellow)
-1. **No folder creation** 🟡 Medium priority
-   - Symptoms: No folder creation button
-   - Workaround: Create a folder in explorer of projects
-   - Fix planned: next release (v0.2.0) **ISSUE FIXED!!!!!!!!**
-2. **Terminal instability** 🔴 High priority
-   - Symptoms: Terminal crashes after 5-10 commands, becomes unresponsive
-   - Workaround: Restart terminal with `Ctrl+Shift+\` or reopen project
-   - Fix planned: Next release (v0.2.0) **ISSUE FIXED!!!!!!!!**
-3. **Git problem** 🟢 Low priority
-   - Symptoms: When the Git tab is opened, the panel displays files from the entire filesystem instead of just the project.
-   - Workaround: unfortunately no workaround :(
-   - Fix planned: Next 2 release (v0.3.0) **ISSUE FIXED!!!!!!!!**
+> **Status:** Stable for daily use | Active development | don't have a known issues
 
 ## Features
 
