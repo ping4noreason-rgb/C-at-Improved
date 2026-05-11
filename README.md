@@ -131,7 +131,7 @@ Core Editor
 ## Build from Source
 1. Clone repository:
    ```bash
-   git clone https://github.com/ping4noreason-rgb/cat-editor.git
+   git clone https://github.com/ping4noreason-rgb/C-at-Improved.git
    cd cat-editor
 2. Build frontend (if you have React/Vue frontend)
 3. Or copy dist files to /dist folder
