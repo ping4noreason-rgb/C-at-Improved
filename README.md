@@ -132,7 +132,7 @@ Core Editor
 1. Clone repository:
    ```bash
    git clone https://github.com/ping4noreason-rgb/C-at-Improved.git
-   cd C-at-Improved
+   cd C-at-Improved/src-tauri
 2. Build frontend (if you have React/Vue frontend)
 3. Or copy dist files to /dist folder
 4. Build Tauri application:
